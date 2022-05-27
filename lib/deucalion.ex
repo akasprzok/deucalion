@@ -2,13 +2,13 @@ defmodule Deucalion do
   @moduledoc """
   Documentation for `Deucalion`.
 
-  Generally follows https://prometheus.io/docs/instrumenting/writing_exporters/
+  https://github.com/Showmax/prometheus-docs/blob/master/content/docs/instrumenting/exposition_formats.md#text-format-details
   """
 
   import NimbleParsec
 
-  documentation = utf8_string([], min: 1)
-  |> tag(:documentation)
+  docstring = utf8_string([], min: 1)
+  |> tag(:docstring)
 
   label = ascii_string([?a..?z] ++ [?_], min: 1)
 
@@ -19,7 +19,7 @@ defmodule Deucalion do
     |> concat(label)
     |> tag(:label)
     |> ignore(string(" "))
-    |> concat(documentation)
+    |> concat(docstring)
 
   comment =
     string("#")
