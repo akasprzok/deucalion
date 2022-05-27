@@ -49,7 +49,7 @@ defmodule Deucalion do
       comment_body
     ])
 
-  timestamp = ignore(string(" ")) |> utf8_string([?0..?9], min: 1) |> tag(:timestamp)
+  timestamp = ignore(string(" ")) |> utf8_string([?0..?9], min: 1) |> unwrap_and_tag(:timestamp)
 
   key_value_pair =
     label
@@ -70,11 +70,13 @@ defmodule Deucalion do
 
   sample =
     label
-    |> tag(:label)
+    |> unwrap_and_tag(:metric_name)
     |> optional(key_value_pairs)
     |> ignore(string(" "))
-    |> ascii_string([?0..?9], min: 1)
-    |> tag(:value)
+    |> concat(
+      ascii_string([?0..?9], min: 1)
+      |> unwrap_and_tag(:value)
+    )
     |> optional(timestamp)
 
   defparsecp(
@@ -123,11 +125,11 @@ defmodule Deucalion do
     %CommentLine{comment: comment}
   end
 
-  defp cast(value: [{:label, [metric_name]}, value]) do
+  defp cast(metric_name: metric_name, value: value) do
     %Sample{metric_name: metric_name, value: value}
   end
 
-  defp cast(value: [{:label, [metric_name]}, value], timestamp: [timestamp]) do
+  defp cast(metric_name: metric_name, value: value, timestamp: timestamp) do
     %Sample{metric_name: metric_name, value: value, timestamp: timestamp}
   end
 end
