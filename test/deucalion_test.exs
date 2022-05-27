@@ -9,7 +9,6 @@ defmodule DeucalionTest do
   @comment_line "# I am a comment"
   @sample "i_am_a_metric_name 7744"
   @sample_with_timestamp "http_requests_total 42 1395066363000"
-  @sample_with_kvs ~s(http_requests_total{method="post",code="200"} 1027 1395066363000)
 
   test "parses a help line" do
     assert Deucalion.parse_line(@help_line) == %HelpLine{
@@ -43,7 +42,18 @@ defmodule DeucalionTest do
       assert Deucalion.parse_line(@sample_with_timestamp) == %Sample{
                metric_name: "http_requests_total",
                value: "42",
-               timestamp: "1395066363000"
+               timestamp: 1_395_066_363_000
+             }
+    end
+
+    test "sample with labels" do
+      line = ~s(http_requests_total{method="post",code="200"} 1027 1395066363000)
+
+      assert Deucalion.parse_line(line) == %Sample{
+               metric_name: "http_requests_total",
+               value: "1027",
+               timestamp: 1_395_066_363_000,
+               labels: [{"method", "post"}, {"code", "200"}]
              }
     end
   end

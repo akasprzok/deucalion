@@ -13,13 +13,17 @@ defmodule Deucalion do
     utf8_string([], min: 1)
     |> unwrap_and_tag(:docstring)
 
-  label = ascii_string([?a..?z, ?_], min: 1)
+  # https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels
+  metric_name =
+    ascii_string([?a..?z, ?A..?Z, ?_, ?:], max: 1)
+    |> ascii_string([?a..?z, ?A..?Z, ?_, ?:], min: 0)
+    |> tag(:metric_name)
 
   help_body =
     string("HELP")
     |> unwrap_and_tag(:comment_type)
     |> ignore(string(" "))
-    |> concat(label |> unwrap_and_tag(:metric_name))
+    |> concat(metric_name)
     |> ignore(string(" "))
     |> concat(docstring)
 
@@ -27,7 +31,7 @@ defmodule Deucalion do
     string("TYPE")
     |> unwrap_and_tag(:comment_type)
     |> ignore(string(" "))
-    |> concat(label |> unwrap_and_tag(:metric_name))
+    |> concat(metric_name)
     |> ignore(string(" "))
     |> concat(
       choice([
@@ -51,27 +55,39 @@ defmodule Deucalion do
 
   timestamp = ignore(string(" ")) |> utf8_string([?0..?9], min: 1) |> unwrap_and_tag(:timestamp)
 
-  key_value_pair =
-    label
+  key =
+    ascii_string([?a..?z, ?A..?Z, ?_], max: 1)
+    |> ascii_string([?a..?z, ?A..?Z, ?_], min: 0)
     |> tag(:key)
-    |> ignore(string("="))
-    |> ascii_string([?a..?z, ?A..?Z, ?0..?9], min: 1)
-    |> tag(:value_yeah)
 
-  key_value_pairs =
+  value =
+    optional(
+      ascii_string([?a..?z, ?A..?Z, ?0..?9, ?-..?-, ?_..?_, ?...?:], min: 1)
+      |> unwrap_and_tag(:value)
+    )
+
+  label =
+    key
+    |> ignore(string("=\""))
+    |> concat(value)
+    |> tag(:label)
+    |> ignore(string("\""))
+
+  labels =
     ignore(string("{"))
-    |> times(
-      key_value_pair
-      |> ignore(optional(string(",")))
-      |> ignore(optional(string(" "))),
-      min: 0
+    |> concat(
+      repeat(
+        label
+        |> ignore(optional(string(",")))
+        |> ignore(optional(string(" ")))
+      )
     )
     |> ignore(string("}"))
+    |> tag(:labels)
 
   sample =
-    label
-    |> unwrap_and_tag(:metric_name)
-    |> optional(key_value_pairs)
+    metric_name
+    |> optional(labels)
     |> ignore(string(" "))
     |> concat(
       ascii_string([?0..?9], min: 1)
@@ -114,10 +130,18 @@ defmodule Deucalion do
   end
 
   defp cast([{:comment_type, "TYPE"} | opts]) do
+    opts =
+      opts
+      |> Keyword.update(:metric_name, nil, &format_metric_name/1)
+
     struct!(%TypeLine{}, opts)
   end
 
   defp cast([{:comment_type, "HELP"} | opts]) do
+    opts =
+      opts
+      |> Keyword.update(:metric_name, nil, &format_metric_name/1)
+
     struct!(%HelpLine{}, opts)
   end
 
@@ -125,11 +149,27 @@ defmodule Deucalion do
     %CommentLine{comment: comment}
   end
 
-  defp cast(metric_name: metric_name, value: value) do
-    %Sample{metric_name: metric_name, value: value}
+  defp cast([{:metric_name, _} | _] = opts) do
+    opts =
+      opts
+      |> Keyword.update(:timestamp, nil, &format_timestamp/1)
+      |> Keyword.update(:metric_name, nil, &format_metric_name/1)
+      |> Keyword.update(:labels, [], &format_labels/1)
+
+    struct!(%Sample{}, opts)
   end
 
-  defp cast(metric_name: metric_name, value: value, timestamp: timestamp) do
-    %Sample{metric_name: metric_name, value: value, timestamp: timestamp}
+  defp format_timestamp(timestamp) do
+    timestamp |> String.to_integer()
+  end
+
+  defp format_metric_name(metric_name) do
+    metric_name |> IO.iodata_to_binary()
+  end
+
+  defp format_labels(labels) do
+    Enum.map(labels, fn {:label, [key: key, value: value]} ->
+      {key |> IO.iodata_to_binary(), value}
+    end)
   end
 end
