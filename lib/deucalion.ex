@@ -11,13 +11,13 @@ defmodule Deucalion do
 
   docstring =
     utf8_string([], min: 1)
-    |> tag(:docstring)
+    |> unwrap_and_tag(:docstring)
 
-  label = ascii_string([?a..?z,?_], min: 1)
+  label = ascii_string([?a..?z, ?_], min: 1)
 
   help_body =
     string("HELP")
-    |> unwrap_and_tag(:help)
+    |> unwrap_and_tag(:comment_type)
     |> ignore(string(" "))
     |> concat(label |> unwrap_and_tag(:metric_name))
     |> ignore(string(" "))
@@ -25,42 +25,47 @@ defmodule Deucalion do
 
   type_body =
     string("TYPE")
-    |> unwrap_and_tag(:type)
+    |> unwrap_and_tag(:comment_type)
     |> ignore(string(" "))
     |> concat(label |> unwrap_and_tag(:metric_name))
     |> ignore(string(" "))
-    |> concat(choice([
-      string("counter"),
-      string("gauge")
-    ]) |> unwrap_and_tag(:metric_type))
+    |> concat(
+      choice([
+        string("counter"),
+        string("gauge")
+      ])
+      |> unwrap_and_tag(:metric_type)
+    )
 
   comment_body =
     utf8_string([], min: 1)
-    |> tag(:comment)
+    |> unwrap_and_tag(:comment)
 
   comment =
     ignore(string("# "))
-    |> choice(
-      [
-        type_body,
-        help_body,
-        comment_body,
-      ])
-
+    |> choice([
+      type_body,
+      help_body,
+      comment_body
+    ])
 
   timestamp = ignore(string(" ")) |> utf8_string([?0..?9], min: 1) |> tag(:timestamp)
 
-  key_value_pair = label
-  |> tag(:key)
-  |> ignore(string("="))
-  |> ascii_string([?a..?z, ?A..?Z, ?0..?9], min: 1)
-  |> tag(:value_yeah)
+  key_value_pair =
+    label
+    |> tag(:key)
+    |> ignore(string("="))
+    |> ascii_string([?a..?z, ?A..?Z, ?0..?9], min: 1)
+    |> tag(:value_yeah)
 
-  key_value_pairs = ignore(string("{"))
+  key_value_pairs =
+    ignore(string("{"))
     |> times(
       key_value_pair
       |> ignore(optional(string(",")))
-      |> ignore(optional(string(" "))), min: 0)
+      |> ignore(optional(string(" "))),
+      min: 0
+    )
     |> ignore(string("}"))
 
   sample =
@@ -106,15 +111,15 @@ defmodule Deucalion do
     end
   end
 
-  defp cast(type: "TYPE", metric_name: metric_name, metric_type: metric_type) do
-    %TypeLine{metric_name: metric_name, metric_type: metric_type}
+  defp cast([{:comment_type, "TYPE"} | opts]) do
+    struct!(%TypeLine{}, opts)
   end
 
-  defp cast(help: "HELP", metric_name: metric_name, docstring: [docstring]) do
-    %HelpLine{metric_name: metric_name, docstring: docstring}
+  defp cast([{:comment_type, "HELP"} | opts]) do
+    struct!(%HelpLine{}, opts)
   end
 
-  defp cast(comment: [comment]) do
+  defp cast(comment: comment) do
     %CommentLine{comment: comment}
   end
 
