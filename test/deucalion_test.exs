@@ -8,6 +8,7 @@ defmodule DeucalionTest do
   @type_line "# TYPE i_am_a_metric_name gauge"
   @comment_line "# I am a comment"
   @sample "i_am_a_metric_name 7744"
+  @sample_with_timestamp "http_requests_total 42 1395066363000"
 
   test "parses a help line" do
     assert Deucalion.parse_line(@help_line) == %HelpLine{
@@ -29,10 +30,20 @@ defmodule DeucalionTest do
            }
   end
 
-  test "parses a sample" do
-    assert Deucalion.parse_line(@sample) == %Sample{
-             metric_name: "i_am_a_metric_name",
-             value: "7744"
-           }
+  describe "Sample parsing" do
+    test "simple sample" do
+      assert Deucalion.parse_line(@sample) == %Sample{
+               metric_name: "i_am_a_metric_name",
+               value: "7744"
+             }
+    end
+
+    test "sample with timestamp" do
+      assert Deucalion.parse_line(@sample_with_timestamp) == %Sample{
+               metric_name: "http_requests_total",
+               value: "42",
+               timestamp: "1395066363000"
+             }
+    end
   end
 end

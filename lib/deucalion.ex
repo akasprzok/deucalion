@@ -51,8 +51,7 @@ defmodule Deucalion do
     |> ignore(string(" "))
     |> ascii_string([?0..?9], min: 1)
     |> tag(:value)
-
-  timestamp = ignore(string(" ")) |> ascii_string([?0..?9], min: 1) |> tag(:timestamp)
+    |> optional(ignore(string(" ")) |> ascii_string([?0..?9], min: 1) |> tag(:timestamp))
 
   defparsec(
     :parse,
@@ -60,8 +59,7 @@ defmodule Deucalion do
       comment |> concat(help_body),
       comment |> concat(type_body),
       comment |> concat(comment_body),
-      sample,
-      sample |> concat(timestamp)
+      sample
     ])
   )
 
@@ -86,18 +84,28 @@ defmodule Deucalion do
   defp to_line(line) do
     line
     |> case do
-      {:ok, [comment: ["#"], type: [{:type, ["TYPE"]}, metric_name, metric_type]], _, _, _, _} ->
-        %TypeLine{metric_name: metric_name, metric_type: metric_type}
-
-      {:ok, [comment: ["#"], label: [{:help, ["HELP"]}, metric_name], docstring: [docstring]], _,
-       _, _, _} ->
-        %HelpLine{metric_name: metric_name, docstring: docstring}
-
-      {:ok, [comment: ["#"], comment_body: [comment]], _, _, _, _} ->
-        %CommentLine{comment: comment}
-
-      {:ok, [value: [{:label, [metric_name]}, value]], _, _, _, _} ->
-        %Sample{metric_name: metric_name, value: value}
+      {:ok, value, _, _, _, _} ->
+        cast(value)
     end
+  end
+
+  defp cast(comment: ["#"], type: [{:type, ["TYPE"]}, metric_name, metric_type]) do
+    %TypeLine{metric_name: metric_name, metric_type: metric_type}
+  end
+
+  defp cast(comment: ["#"], label: [{:help, ["HELP"]}, metric_name], docstring: [docstring]) do
+    %HelpLine{metric_name: metric_name, docstring: docstring}
+  end
+
+  defp cast(comment: ["#"], comment_body: [comment]) do
+    %CommentLine{comment: comment}
+  end
+
+  defp cast(value: [{:label, [metric_name]}, value]) do
+    %Sample{metric_name: metric_name, value: value}
+  end
+
+  defp cast(value: [{:label, [metric_name]}, value], timestamp: [timestamp]) do
+    %Sample{metric_name: metric_name, value: value, timestamp: timestamp}
   end
 end
