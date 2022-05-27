@@ -9,6 +9,7 @@ defmodule DeucalionTest do
   @comment_line "# I am a comment"
   @sample "i_am_a_metric_name 7744"
   @sample_with_timestamp "http_requests_total 42 1395066363000"
+  @sample_with_kvs ~s(http_requests_total{method="post",code="200"} 1027 1395066363000)
 
   test "parses a help line" do
     assert Deucalion.parse_line(@help_line) == %HelpLine{

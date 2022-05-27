@@ -13,53 +13,70 @@ defmodule Deucalion do
     utf8_string([], min: 1)
     |> tag(:docstring)
 
-  label = ascii_string([?a..?z] ++ [?_], min: 1)
+  label = ascii_string([?a..?z,?_], min: 1)
 
   help_body =
     string("HELP")
-    |> tag(:help)
+    |> unwrap_and_tag(:help)
     |> ignore(string(" "))
-    |> concat(label)
-    |> tag(:label)
+    |> concat(label |> unwrap_and_tag(:metric_name))
     |> ignore(string(" "))
     |> concat(docstring)
 
-  comment =
-    string("#")
-    |> tag(:comment)
-    |> ignore(string(" "))
-
   type_body =
     string("TYPE")
-    |> tag(:type)
+    |> unwrap_and_tag(:type)
     |> ignore(string(" "))
-    |> concat(label)
+    |> concat(label |> unwrap_and_tag(:metric_name))
     |> ignore(string(" "))
-    |> choice([
+    |> concat(choice([
       string("counter"),
       string("gauge")
-    ])
-    |> tag(:type)
+    ]) |> unwrap_and_tag(:metric_type))
 
   comment_body =
     utf8_string([], min: 1)
-    |> tag(:comment_body)
+    |> tag(:comment)
+
+  comment =
+    ignore(string("# "))
+    |> choice(
+      [
+        type_body,
+        help_body,
+        comment_body,
+      ])
+
+
+  timestamp = ignore(string(" ")) |> utf8_string([?0..?9], min: 1) |> tag(:timestamp)
+
+  key_value_pair = label
+  |> tag(:key)
+  |> ignore(string("="))
+  |> ascii_string([?a..?z, ?A..?Z, ?0..?9], min: 1)
+  |> tag(:value_yeah)
+
+  key_value_pairs = ignore(string("{"))
+    |> times(
+      key_value_pair
+      |> ignore(optional(string(",")))
+      |> ignore(optional(string(" "))), min: 0)
+    |> ignore(string("}"))
 
   sample =
     label
     |> tag(:label)
+    |> optional(key_value_pairs)
     |> ignore(string(" "))
     |> ascii_string([?0..?9], min: 1)
     |> tag(:value)
-    |> optional(ignore(string(" ")) |> ascii_string([?0..?9], min: 1) |> tag(:timestamp))
+    |> optional(timestamp)
 
-  defparsec(
+  defparsecp(
     :parse,
     choice([
-      comment |> concat(help_body),
-      comment |> concat(type_body),
-      comment |> concat(comment_body),
-      sample
+      sample,
+      comment
     ])
   )
 
@@ -89,15 +106,15 @@ defmodule Deucalion do
     end
   end
 
-  defp cast(comment: ["#"], type: [{:type, ["TYPE"]}, metric_name, metric_type]) do
+  defp cast(type: "TYPE", metric_name: metric_name, metric_type: metric_type) do
     %TypeLine{metric_name: metric_name, metric_type: metric_type}
   end
 
-  defp cast(comment: ["#"], label: [{:help, ["HELP"]}, metric_name], docstring: [docstring]) do
+  defp cast(help: "HELP", metric_name: metric_name, docstring: [docstring]) do
     %HelpLine{metric_name: metric_name, docstring: docstring}
   end
 
-  defp cast(comment: ["#"], comment_body: [comment]) do
+  defp cast(comment: [comment]) do
     %CommentLine{comment: comment}
   end
 
