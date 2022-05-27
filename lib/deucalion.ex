@@ -9,6 +9,8 @@ defmodule Deucalion do
 
   alias Deucalion.{TypeLine, HelpLine, CommentLine, Sample}
 
+  leading_whitespace = optional(ignore(ascii_string([32, ?\t], min: 1)))
+
   docstring =
     utf8_string([], min: 1)
     |> unwrap_and_tag(:docstring)
@@ -46,7 +48,8 @@ defmodule Deucalion do
     |> unwrap_and_tag(:comment)
 
   comment =
-    ignore(string("# "))
+    leading_whitespace
+    |> ignore(string("# "))
     |> choice([
       type_body,
       help_body,
@@ -55,23 +58,26 @@ defmodule Deucalion do
 
   timestamp = ignore(string(" ")) |> utf8_string([?0..?9], min: 1) |> unwrap_and_tag(:timestamp)
 
-  key =
+  label_name =
     ascii_string([?a..?z, ?A..?Z, ?_], max: 1)
     |> ascii_string([?a..?z, ?A..?Z, ?_], min: 0)
-    |> tag(:key)
+    |> tag(:name)
 
-  value =
+  label_value =
     optional(
-      ascii_string([?a..?z, ?A..?Z, ?0..?9, ?-..?-, ?_..?_, ?...?:], min: 1)
+      ignore(string("\""))
+      |> ascii_string([32, ?a..?z, ?A..?Z, ?0..?9, ?-, ?_, ?...?:, ?\\, ?\n] |> IO.inspect(),
+        min: 1
+      )
+      |> ignore(string("\""))
       |> unwrap_and_tag(:value)
     )
 
   label =
-    key
-    |> ignore(string("=\""))
-    |> concat(value)
+    label_name
+    |> ignore(string("="))
+    |> concat(label_value)
     |> tag(:label)
-    |> ignore(string("\""))
 
   labels =
     ignore(string("{"))
@@ -85,14 +91,21 @@ defmodule Deucalion do
     |> ignore(string("}"))
     |> tag(:labels)
 
+  value =
+    choice([
+      ascii_string([?0..?9, ?., ?e], min: 1),
+      string("+Inf"),
+      string("-Inf"),
+      string("Nan")
+    ])
+    |> unwrap_and_tag(:value)
+
   sample =
-    metric_name
+    leading_whitespace
+    |> concat(metric_name)
     |> optional(labels)
     |> ignore(string(" "))
-    |> concat(
-      ascii_string([?0..?9, ?.], min: 1)
-      |> unwrap_and_tag(:value)
-    )
+    |> concat(value)
     |> optional(timestamp)
 
   defparsecp(
@@ -168,8 +181,8 @@ defmodule Deucalion do
   end
 
   defp format_labels(labels) do
-    Enum.map(labels, fn {:label, [key: key, value: value]} ->
-      {key |> IO.iodata_to_binary(), value}
+    Enum.map(labels, fn {:label, [name: name, value: value]} ->
+      {name |> IO.iodata_to_binary(), value}
     end)
   end
 end

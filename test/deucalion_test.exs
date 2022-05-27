@@ -40,6 +40,15 @@ defmodule DeucalionTest do
              }
     end
 
+    test "minimalistic line with leading and trailing whitespace" do
+      line = ~s( \t  metric_without_timestamp_and_labels 12.47  \t)
+
+      assert Deucalion.parse_line(line) == %Sample{
+               metric_name: "metric_without_timestamp_and_labels",
+               value: "12.47"
+             }
+    end
+
     test "sample with timestamp" do
       line = ~s(http_requests_total 1027 1395066363000)
 
@@ -58,6 +67,31 @@ defmodule DeucalionTest do
                value: "1027",
                timestamp: 1_395_066_363_000,
                labels: [{"method", "post"}, {"code", "200"}]
+             }
+    end
+
+    test "a weird metric" do
+      line = ~s(something_weird{problem="division by zero"} +Inf 12345)
+
+      assert Deucalion.parse_line(line) == %Sample{
+               metric_name: "something_weird",
+               value: "+Inf",
+               timestamp: 12345,
+               labels: [{"problem", "division by zero"}]
+             }
+    end
+
+    test "escaping in label values" do
+      line =
+        ~s(msdos_file_access_time_seconds{path="C:\\DIR\\FILE.TXT",error="Cannot find file:\n\"FILE.TXT\""} 1.458255915e9)
+
+      assert Deucalion.parse_line(line) == %Sample{
+               metric_name: "msdos_file_access_time_seconds",
+               value: "1.458255915e9",
+               labels: [
+                 {"path", "C:\\DIR\\FILE.TXT"},
+                 {"error", "Cannot find file:\n\"FILE.TXT\""}
+               ]
              }
     end
   end
