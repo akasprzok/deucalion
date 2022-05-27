@@ -7,7 +7,7 @@ defmodule Deucalion do
 
   import NimbleParsec
 
-  alias Deucalion.{TypeLine, HelpLine, CommentLine}
+  alias Deucalion.{TypeLine, HelpLine, CommentLine, Sample}
 
   docstring =
     utf8_string([], min: 1)
@@ -45,12 +45,23 @@ defmodule Deucalion do
     utf8_string([], min: 1)
     |> tag(:comment_body)
 
+  sample =
+    label
+    |> tag(:label)
+    |> ignore(string(" "))
+    |> ascii_string([?0..?9], min: 1)
+    |> tag(:value)
+
+  timestamp = ignore(string(" ")) |> ascii_string([?0..?9], min: 1) |> tag(:timestamp)
+
   defparsec(
     :parse,
     choice([
       comment |> concat(help_body),
       comment |> concat(type_body),
-      comment |> concat(comment_body)
+      comment |> concat(comment_body),
+      sample,
+      sample |> concat(timestamp)
     ])
   )
 
@@ -84,6 +95,9 @@ defmodule Deucalion do
 
       {:ok, [comment: ["#"], comment_body: [comment]], _, _, _, _} ->
         %CommentLine{comment: comment}
+
+      {:ok, [value: [{:label, [metric_name]}, value]], _, _, _, _} ->
+        %Sample{metric_name: metric_name, value: value}
     end
   end
 end
