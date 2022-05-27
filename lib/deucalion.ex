@@ -7,8 +7,11 @@ defmodule Deucalion do
 
   import NimbleParsec
 
-  docstring = utf8_string([], min: 1)
-  |> tag(:docstring)
+  alias Deucalion.{TypeLine, HelpLine}
+
+  docstring =
+    utf8_string([], min: 1)
+    |> tag(:docstring)
 
   label = ascii_string([?a..?z] ++ [?_], min: 1)
 
@@ -26,22 +29,25 @@ defmodule Deucalion do
     |> tag(:comment)
     |> ignore(string(" "))
 
-  type_body = string("TYPE")
-  |> tag(:type) |> ignore(string(" "))
-  |> concat(label)
-  |> ignore(string(" "))
-  |> choice([
-    string("counter"),
-    string("gauge")
-  ])
-  |> tag(:type)
+  type_body =
+    string("TYPE")
+    |> tag(:type)
+    |> ignore(string(" "))
+    |> concat(label)
+    |> ignore(string(" "))
+    |> choice([
+      string("counter"),
+      string("gauge")
+    ])
+    |> tag(:type)
 
-
-  defparsec(:parse_line,
-  choice([
-    comment |> concat(help_body),
-    comment |> concat(type_body)
-  ]))
+  defparsec(
+    :parse,
+    choice([
+      comment |> concat(help_body),
+      comment |> concat(type_body)
+    ])
+  )
 
   def parse_file(path) do
     path
@@ -55,16 +61,21 @@ defmodule Deucalion do
     |> Enum.map(&parse_line/1)
   end
 
-  @doc """
-  Hello world.
+  def parse_line(line) do
+    line
+    |> parse()
+    |> to_line()
+  end
 
-  ## Examples
+  def to_line(line) do
+    line
+    |> case do
+      {:ok, [comment: ["#"], type: [{:type, ["TYPE"]}, metric_name, metric_type]], _, _, _, _} ->
+        %TypeLine{metric_name: metric_name, metric_type: metric_type}
 
-      iex> Deucalion.hello()
-      :world
-
-  """
-  def hello do
-    :world
+      {:ok, [comment: ["#"], label: [{:help, ["HELP"]}, metric_name], docstring: [docstring]], _,
+       _, _, _} ->
+        %HelpLine{metric_name: metric_name, docstring: docstring}
+    end
   end
 end
