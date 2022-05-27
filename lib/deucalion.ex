@@ -90,7 +90,7 @@ defmodule Deucalion do
     |> optional(labels)
     |> ignore(string(" "))
     |> concat(
-      ascii_string([?0..?9], min: 1)
+      ascii_string([?0..?9, ?.], min: 1)
       |> unwrap_and_tag(:value)
     )
     |> optional(timestamp)

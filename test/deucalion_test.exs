@@ -4,49 +4,53 @@ defmodule DeucalionTest do
 
   alias Deucalion.{HelpLine, TypeLine, CommentLine, Sample}
 
-  @help_line "# HELP i_am_a_metric_name This is a docstring"
-  @type_line "# TYPE i_am_a_metric_name gauge"
-  @comment_line "# I am a comment"
-  @sample "i_am_a_metric_name 7744"
-  @sample_with_timestamp "http_requests_total 42 1395066363000"
-
   test "parses a help line" do
-    assert Deucalion.parse_line(@help_line) == %HelpLine{
-             metric_name: "i_am_a_metric_name",
-             docstring: "This is a docstring"
+    line = ~s(# HELP http_requests_total The total number of HTTP requests.)
+
+    assert Deucalion.parse_line(line) == %HelpLine{
+             metric_name: "http_requests_total",
+             docstring: "The total number of HTTP requests."
            }
   end
 
   test "parses a type line" do
-    assert Deucalion.parse_line(@type_line) == %TypeLine{
-             metric_name: "i_am_a_metric_name",
-             metric_type: "gauge"
+    line = ~s(# TYPE http_requests_total counter)
+
+    assert Deucalion.parse_line(line) == %TypeLine{
+             metric_name: "http_requests_total",
+             metric_type: "counter"
            }
   end
 
   test "parses a comment" do
-    assert Deucalion.parse_line(@comment_line) == %CommentLine{
+    line = ~s(# I am a comment)
+
+    assert Deucalion.parse_line(line) == %CommentLine{
              comment: "I am a comment"
            }
   end
 
-  describe "Sample parsing" do
-    test "simple sample" do
-      assert Deucalion.parse_line(@sample) == %Sample{
-               metric_name: "i_am_a_metric_name",
-               value: "7744"
+  describe "Samples" do
+    test "minimalistic line" do
+      line = ~s(metric_without_timestamp_and_labels 12.47)
+
+      assert Deucalion.parse_line(line) == %Sample{
+               metric_name: "metric_without_timestamp_and_labels",
+               value: "12.47"
              }
     end
 
     test "sample with timestamp" do
-      assert Deucalion.parse_line(@sample_with_timestamp) == %Sample{
+      line = ~s(http_requests_total 1027 1395066363000)
+
+      assert Deucalion.parse_line(line) == %Sample{
                metric_name: "http_requests_total",
-               value: "42",
+               value: "1027",
                timestamp: 1_395_066_363_000
              }
     end
 
-    test "sample with labels" do
+    test "sample with label" do
       line = ~s(http_requests_total{method="post",code="200"} 1027 1395066363000)
 
       assert Deucalion.parse_line(line) == %Sample{
