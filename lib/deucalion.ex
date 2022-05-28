@@ -69,25 +69,23 @@ defmodule Deucalion do
       |> repeat(
         lookahead_not(utf8_string([not: 125], min: 0))
         |> utf8_char([])
-      |> reduce({List, :to_string, []})
-
+        |> reduce({List, :to_string, []})
       )
       |> ignore(string("\""))
       |> unwrap_and_tag(:value)
     )
 
-  until_last_paren =
-    repeat_while(utf8_char([]), {:final_paren?, []})
+  until_last_paren = repeat_while(utf8_char([]), {:final_paren?, []})
 
-    defp final_paren?(<<"}", _::binary>>, context, _, _) do
-     IO.inspect(context, label: "halt")
-     {:halt, context}
-    end
+  defp final_paren?(<<"}", _::binary>>, context, _, _) do
+    IO.inspect(context, label: "halt")
+    {:halt, context}
+  end
 
-    defp final_paren?(_, context, _, _) do
-      IO.inspect(context, label: "cont")
-      {:cont, context}
-    end
+  defp final_paren?(_, context, _, _) do
+    IO.inspect(context, label: "cont")
+    {:cont, context}
+  end
 
   label =
     label_name

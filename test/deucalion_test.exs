@@ -84,14 +84,14 @@ defmodule DeucalionTest do
     test "escaping in label values" do
       line =
         ~s(msdos_file_access_time_seconds{path="path",error="Cannot find file:\n\""} 1.458255915e9)
-        #~s(msdos_file_access_time_seconds{path="C:\\DIR\\FILE.TXT",error="Cannot find file:\n\"FILE.TXT\""} 1.458255915e9)
+
+      # ~s(msdos_file_access_time_seconds{path="C:\\DIR\\FILE.TXT",error="Cannot find file:\n\"FILE.TXT\""} 1.458255915e9)
 
       assert Deucalion.parse_line(line) == %Sample{
                metric_name: "msdos_file_access_time_seconds",
                value: "1.458255915e9",
                labels: [
-
-                 #{"path", "C:\\DIR\\FILE.TXT"},
+                 # {"path", "C:\\DIR\\FILE.TXT"},
                  {"path", "path"},
                  {"error", "Cannot find file\n"}
                ]

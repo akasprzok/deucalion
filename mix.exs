@@ -22,7 +22,6 @@ defmodule Deucalion.MixProject do
   defp deps do
     [
       {:nimble_parsec, "~> 1.0"},
-
       {:credo, "~> 1.6", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.1", only: :dev, runtime: false},
       {:git_hooks, "~> 0.7", only: :dev, runtime: false}
