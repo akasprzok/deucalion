@@ -66,12 +66,28 @@ defmodule Deucalion do
   label_value =
     optional(
       ignore(string("\""))
-      |> ascii_string([32, ?a..?z, ?A..?Z, ?0..?9, ?-, ?_, ?...?:, ?\\, ?\n] |> IO.inspect(),
-        min: 1
+      |> repeat(
+        lookahead_not(utf8_string([not: 125], min: 0))
+        |> utf8_char([])
+      |> reduce({List, :to_string, []})
+
       )
       |> ignore(string("\""))
       |> unwrap_and_tag(:value)
     )
+
+  until_last_paren =
+    repeat_while(utf8_char([]), {:final_paren?, []})
+
+    defp final_paren?(<<"}", _::binary>>, context, _, _) do
+     IO.inspect(context, label: "halt")
+     {:halt, context}
+    end
+
+    defp final_paren?(_, context, _, _) do
+      IO.inspect(context, label: "cont")
+      {:cont, context}
+    end
 
   label =
     label_name
@@ -87,6 +103,7 @@ defmodule Deucalion do
         |> ignore(optional(string(",")))
         |> ignore(optional(string(" ")))
       )
+      |> lookahead_not(string("\"} "))
     )
     |> ignore(string("}"))
     |> tag(:labels)
@@ -115,6 +132,8 @@ defmodule Deucalion do
       comment
     ])
   )
+
+  defparsec(:test, until_last_paren)
 
   def parse_file(path) do
     path
