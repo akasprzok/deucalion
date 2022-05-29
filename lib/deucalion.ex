@@ -53,7 +53,7 @@ defmodule Deucalion do
     |> choice([
       type_body,
       help_body,
-      comment_body,
+      comment_body
     ])
 
   timestamp = ignore(string(" ")) |> utf8_string([?0..?9], min: 1) |> unwrap_and_tag(:timestamp)
@@ -66,7 +66,7 @@ defmodule Deucalion do
   label_value =
     optional(
       ignore(string("\""))
-      |> ascii_string([32, ?a..?z, ?A..?Z, ?0..?9, ?-, ?_, ?...?:, ?\\, ?\n] |> IO.inspect(),
+      |> ascii_string([32, ?a..?z, ?A..?Z, ?0..?9, ?-, ?_, ?...?:, ?\\, ?\n],
         min: 1
       )
       |> ignore(string("\""))

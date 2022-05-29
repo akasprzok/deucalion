@@ -81,5 +81,4 @@ defmodule DeucalionTest do
              }
     end
   end
-
 end
