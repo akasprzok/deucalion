@@ -148,7 +148,7 @@ defmodule Deucalion do
       opts
       |> Keyword.update(:metric_name, nil, &format_metric_name/1)
 
-    struct!(%TypeLine{}, opts)
+    struct!(TypeLine, opts)
   end
 
   defp cast([{:comment_type, "HELP"} | opts]) do
@@ -156,7 +156,7 @@ defmodule Deucalion do
       opts
       |> Keyword.update(:metric_name, nil, &format_metric_name/1)
 
-    struct!(%HelpLine{}, opts)
+    struct!(HelpLine, opts)
   end
 
   defp cast(comment: comment) do
@@ -170,7 +170,7 @@ defmodule Deucalion do
       |> Keyword.update(:metric_name, nil, &format_metric_name/1)
       |> Keyword.update(:labels, [], &format_labels/1)
 
-    struct!(%Sample{}, opts)
+    struct!(Sample, opts)
   end
 
   defp format_timestamp(timestamp) do

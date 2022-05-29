@@ -2,7 +2,7 @@ defmodule DeucalionTest do
   use ExUnit.Case
   doctest Deucalion
 
-  alias Deucalion.{HelpLine, TypeLine, CommentLine, Sample}
+  alias Deucalion.{CommentLine, HelpLine, Sample, TypeLine}
 
   test "parses a help line" do
     line = ~s(# HELP http_requests_total The total number of HTTP requests.)
@@ -76,7 +76,7 @@ defmodule DeucalionTest do
       assert Deucalion.parse_line(line) == %Sample{
                metric_name: "something_weird",
                value: "+Inf",
-               timestamp: 12345,
+               timestamp: 12_345,
                labels: [{"problem", "division by zero"}]
              }
     end
