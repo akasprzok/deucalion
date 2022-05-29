@@ -1,13 +1,15 @@
 defmodule Deucalion do
   @moduledoc """
-  Documentation for `Deucalion`.
+  Deucalion is a parser for the Prometheus metric format.
 
+  Based primarily on these sources:
   https://github.com/Showmax/prometheus-docs/blob/master/content/docs/instrumenting/exposition_formats.md#text-format-details
+  https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels
   """
 
   import NimbleParsec
 
-  alias Deucalion.{TypeLine, HelpLine, CommentLine, Sample}
+  alias Deucalion.{CommentLine, HelpLine, Sample, TypeLine}
 
   leading_whitespace = optional(ignore(ascii_string([32, ?\t], min: 1)))
 
@@ -15,7 +17,6 @@ defmodule Deucalion do
     utf8_string([], min: 1)
     |> unwrap_and_tag(:docstring)
 
-  # https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels
   metric_name =
     ascii_string([?a..?z, ?A..?Z, ?_, ?:], max: 1)
     |> ascii_string([?a..?z, ?A..?Z, ?_, ?:], min: 0)
