@@ -18,7 +18,7 @@ defmodule Deucalion.MetricFamily do
           name: String.t(),
           type: Deucalion.MetricType.t(),
           help: String.t(),
-          metrics: %{labels => Deucalion.Metric.t()}
+          metrics: %{labels => Metric.t()} | Metric.t()
         }
 
   @enforce_keys [:name]
@@ -37,7 +37,8 @@ defmodule Deucalion.MetricFamily do
   end
 
   def from_tokens([{:name, name} | opts]) do
-    [{:labels, labels} | metric_opts] = opts
+    labels = opts |> Keyword.get(:labels, %{})
+    metric_opts = opts |> Keyword.take([:timestamp, :value])
     %__MODULE__{name: name, metrics: %{labels => struct!(Metric, metric_opts)}}
   end
 
@@ -103,7 +104,7 @@ defmodule Deucalion.MetricType do
   """
   @type t :: :counter | :gauge | :histogram | :summary | :untyped
 
-  #@valid_values [:counter, :gauge, :histogram, :summary, :untyped]
+  # @valid_values [:counter, :gauge, :histogram, :summary, :untyped]
 
   @spec parse(binary()) :: t()
   def parse(binary) do

@@ -62,7 +62,11 @@ defmodule Deucalion do
       comment_body
     ])
 
-  timestamp = ignore(string(" ")) |> integer(min: 1) |> unwrap_and_tag(:timestamp)
+  timestamp =
+    whitespace
+    |> ascii_string([?0..?9, ?-], min: 1)
+    |> map({String, :to_integer, []})
+    |> unwrap_and_tag(:timestamp)
 
   label_name =
     ascii_string([?a..?z, ?A..?Z, ?_], max: 1)
