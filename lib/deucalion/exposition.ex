@@ -11,49 +11,50 @@ defmodule Deucalion.MetricFamily do
   A MetricFamily is a collection of metrics with a unique name.
   Each metric within it must have a unique set of LabelPair fields.
   """
+  @type labels :: %{String.t() => String.t()}
   @type t :: %__MODULE__{
           name: String.t(),
           type: Deucalion.MetricType.t(),
           help: String.t(),
-          metrics: list(Deucalion.Metric.t())
+          metrics: %{labels => Deucalion.Metric.t()}
         }
 
   @enforce_keys [:name]
   defstruct name: nil,
             type: :untyped,
             help: nil,
-            metrics: []
+            metrics: %{}
 end
 
 defmodule Deucalion.Metric do
   @type t :: %__MODULE__{
-          label_pairs: nil,
           value: nil,
           timestamp: integer() | nil
         }
 
-  @enforce_keys [:label_pairs, :value]
-  defstruct label_pairs: nil,
-            value: nil,
+  @enforce_keys [:value]
+  defstruct value: nil,
             timestamp: nil
 end
 
 defmodule Deucalion.Value do
+  @moduledoc """
+  Value is a float represented as required by Go's ParseFloat() function. In addition to standard numerical values, NaN, +Inf, and -Inf are valid values representing not a number, positive infinity, and negative infinity, respectively.
+  """
+
   @type t :: float()
 
-  @spec parse(binary()) :: {:ok, float()} | {:error, term()}
+  @spec parse(binary()) :: {:ok, float() | String.t()} | {:error, term()}
+  def parse("+Inf"), do: "+Inf"
+  def parse("-Inf"), do: "-Inf"
+  def parse("NaN"), do: "Nan"
+
   def parse(binary) do
     binary
     |> Float.parse()
     |> case do
       {float, ""} ->
-        {:ok, float}
-
-      {_, remainder} ->
-        {:error, "Unexpected remaineder #{remainder} when attempting to parse #{binary}"}
-
-      :error ->
-        {:error, :error}
+        float
     end
   end
 end

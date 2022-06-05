@@ -9,9 +9,9 @@ defmodule Deucalion do
 
   import NimbleParsec
 
-  alias Deucalion.{MetricFamily, MetricType}
+  alias Deucalion.{MetricFamily, MetricType, Metric}
 
-  leading_whitespace = optional(ignore(ascii_string([32, ?\t], min: 1)))
+  whitespace = optional(ignore(ascii_string([32, ?\t], min: 1)))
 
   help =
     utf8_string([], min: 1)
@@ -26,22 +26,26 @@ defmodule Deucalion do
   help_body =
     string("HELP")
     |> unwrap_and_tag(:comment_type)
-    |> ignore(string(" "))
+    |> concat(whitespace)
     |> concat(metric_name)
-    |> ignore(string(" "))
+    |> concat(whitespace)
     |> concat(help)
 
   type_body =
     string("TYPE")
     |> unwrap_and_tag(:comment_type)
-    |> ignore(string(" "))
+    |> concat(whitespace)
     |> concat(metric_name)
-    |> ignore(string(" "))
+    |> concat(whitespace)
     |> concat(
       choice([
         string("counter"),
-        string("gauge")
+        string("gauge"),
+        string("histogram"),
+        string("summary"),
+        string("untyped")
       ])
+      |> map({Deucalion.MetricType, :parse, []})
       |> unwrap_and_tag(:metric_type)
     )
 
@@ -50,7 +54,7 @@ defmodule Deucalion do
     |> unwrap_and_tag(:comment)
 
   comment =
-    leading_whitespace
+    whitespace
     |> ignore(string("# "))
     |> choice([
       type_body,
@@ -58,12 +62,13 @@ defmodule Deucalion do
       comment_body
     ])
 
-  timestamp = ignore(string(" ")) |> utf8_string([?0..?9], min: 1) |> unwrap_and_tag(:timestamp)
+  timestamp = ignore(string(" ")) |> integer(min: 1) |> unwrap_and_tag(:timestamp)
 
   label_name =
     ascii_string([?a..?z, ?A..?Z, ?_], max: 1)
     |> ascii_string([?a..?z, ?A..?Z, ?_], min: 0)
-    |> tag(:name)
+    |> reduce({List, :to_string, []})
+    |> unwrap_and_tag(:name)
 
   label_value =
     ignore(string("\""))
@@ -82,7 +87,7 @@ defmodule Deucalion do
     label_name
     |> ignore(string("="))
     |> concat(label_value)
-    |> tag(:label)
+    |> reduce(:label_to_map)
 
   labels =
     ignore(string("{"))
@@ -90,11 +95,12 @@ defmodule Deucalion do
       repeat(
         label
         |> ignore(optional(string(",")))
-        |> ignore(optional(string(" ")))
+        |> concat(whitespace)
       )
     )
     |> ignore(string("}"))
-    |> tag(:labels)
+    |> reduce(:labelize)
+    |> unwrap_and_tag(:labels)
 
   value =
     choice([
@@ -103,13 +109,14 @@ defmodule Deucalion do
       string("-Inf"),
       string("Nan")
     ])
+    |> map({Deucalion.Value, :parse, []})
     |> unwrap_and_tag(:value)
 
   sample =
-    leading_whitespace
+    whitespace
     |> concat(metric_name)
     |> optional(labels)
-    |> ignore(string(" "))
+    |> concat(whitespace)
     |> concat(value)
     |> optional(timestamp)
 
@@ -117,7 +124,8 @@ defmodule Deucalion do
     :parse,
     choice([
       sample,
-      comment
+      comment,
+      whitespace
     ])
   )
 
@@ -127,12 +135,25 @@ defmodule Deucalion do
     |> parse_text()
   end
 
+  def labelize(labels) do
+    labels
+    |> Enum.reduce(%{}, fn label, acc -> Map.merge(acc, label) end)
+  end
+
+  defp label_to_map(name: label, value: value) do
+    %{label => value}
+  end
+
   def parse_text(body) do
     body
     |> String.split("\n")
-    |> IO.inspect(label: "split")
     |> Enum.reduce(%{}, &parse_line/2)
+    |> Map.values()
+    |> maybe_unwrap()
   end
+
+  defp maybe_unwrap([metric_family]), do: metric_family
+  defp maybe_unwrap(metric_families), do: metric_families
 
   defp parse_line(line, exposition) do
     line
@@ -163,20 +184,54 @@ defmodule Deucalion do
          [comment_type: "TYPE", metric_name: metric_name, metric_type: metric_type],
          exposition
        ) do
-    type = MetricType.parse(metric_type)
+    Map.update(
+      exposition,
+      metric_name,
+      %MetricFamily{
+        name: metric_name,
+        type: metric_type
+      },
+      fn metric_family ->
+        %{metric_family | type: metric_type}
+      end
+    )
+  end
+
+  defp do_reduce(
+         [metric_name: metric_name, labels: labels, value: value, timestamp: timestamp],
+         exposition
+       ) do
+    IO.inspect(exposition, label: "do_reduce")
 
     Map.update(
       exposition,
       metric_name,
       %MetricFamily{
         name: metric_name,
-        type: type
+        metrics: %{
+          labels => %Metric{
+            value: value,
+            timestamp: timestamp
+          }
+        }
       },
       fn metric_family ->
-        %{metric_family | type: type}
+        metrics =
+          Map.update(
+            metric_family.metrics,
+            labels,
+            %Metric{value: value, timestamp: timestamp},
+            fn metric -> %{metric | value: value, timestamp: timestamp} end
+          )
+
+        %{metric_family | metrics: metrics}
       end
     )
+    |> IO.inspect(label: "post_update")
   end
+
+  # whitespace/empty line
+  defp do_reduce([], exposition), do: exposition
 
   defp not_quote(<<?", _::binary>>, context, _, _), do: {:halt, context}
   defp not_quote(_, context, _, _), do: {:cont, context}
