@@ -9,7 +9,7 @@ defmodule Deucalion do
 
   import NimbleParsec
 
-  alias Deucalion.{MetricFamily, MetricType, Metric}
+  alias Deucalion.MetricFamily
 
   whitespace = optional(ignore(ascii_string([32, ?\t], min: 1)))
 
@@ -17,17 +17,17 @@ defmodule Deucalion do
     utf8_string([], min: 1)
     |> unwrap_and_tag(:help)
 
-  metric_name =
+  name =
     ascii_string([?a..?z, ?A..?Z, ?_, ?:], max: 1)
     |> ascii_string([?a..?z, ?A..?Z, ?_, ?:], min: 0)
     |> reduce({List, :to_string, []})
-    |> unwrap_and_tag(:metric_name)
+    |> unwrap_and_tag(:name)
 
   help_body =
     string("HELP")
     |> unwrap_and_tag(:comment_type)
     |> concat(whitespace)
-    |> concat(metric_name)
+    |> concat(name)
     |> concat(whitespace)
     |> concat(help)
 
@@ -35,7 +35,7 @@ defmodule Deucalion do
     string("TYPE")
     |> unwrap_and_tag(:comment_type)
     |> concat(whitespace)
-    |> concat(metric_name)
+    |> concat(name)
     |> concat(whitespace)
     |> concat(
       choice([
@@ -46,7 +46,7 @@ defmodule Deucalion do
         string("untyped")
       ])
       |> map({Deucalion.MetricType, :parse, []})
-      |> unwrap_and_tag(:metric_type)
+      |> unwrap_and_tag(:type)
     )
 
   comment_body =
@@ -99,7 +99,7 @@ defmodule Deucalion do
       )
     )
     |> ignore(string("}"))
-    |> reduce(:labelize)
+    |> reduce(:labels_to_map)
     |> unwrap_and_tag(:labels)
 
   value =
@@ -114,7 +114,7 @@ defmodule Deucalion do
 
   sample =
     whitespace
-    |> concat(metric_name)
+    |> concat(name)
     |> optional(labels)
     |> concat(whitespace)
     |> concat(value)
@@ -135,7 +135,7 @@ defmodule Deucalion do
     |> parse_text()
   end
 
-  def labelize(labels) do
+  defp labels_to_map(labels) do
     labels
     |> Enum.reduce(%{}, fn label, acc -> Map.merge(acc, label) end)
   end
@@ -160,78 +160,19 @@ defmodule Deucalion do
     |> parse()
     |> case do
       {:ok, tokens, "", _context, _position, _byte_offset} ->
-        do_reduce(tokens, exposition)
+        tokens |> MetricFamily.from_tokens() |> do_reduce(exposition)
         # {:ok, tokens, remainder, _context, _position, _byte_offset} ->
         # {:error, reason, remainder, context, position, byte_offset}
     end
   end
 
-  defp do_reduce([comment_type: "HELP", metric_name: metric_name, help: help], exposition) do
-    Map.update(
-      exposition,
-      metric_name,
-      %MetricFamily{
-        name: metric_name,
-        help: help
-      },
-      fn metric_family ->
-        %{metric_family | help: help}
-      end
-    )
+  defp do_reduce(%MetricFamily{} = metric_family, exposition) do
+    Map.update(exposition, metric_family.name, metric_family, fn existing_value ->
+      MetricFamily.merge(existing_value, metric_family)
+    end)
   end
 
-  defp do_reduce(
-         [comment_type: "TYPE", metric_name: metric_name, metric_type: metric_type],
-         exposition
-       ) do
-    Map.update(
-      exposition,
-      metric_name,
-      %MetricFamily{
-        name: metric_name,
-        type: metric_type
-      },
-      fn metric_family ->
-        %{metric_family | type: metric_type}
-      end
-    )
-  end
-
-  defp do_reduce(
-         [metric_name: metric_name, labels: labels, value: value, timestamp: timestamp],
-         exposition
-       ) do
-    IO.inspect(exposition, label: "do_reduce")
-
-    Map.update(
-      exposition,
-      metric_name,
-      %MetricFamily{
-        name: metric_name,
-        metrics: %{
-          labels => %Metric{
-            value: value,
-            timestamp: timestamp
-          }
-        }
-      },
-      fn metric_family ->
-        metrics =
-          Map.update(
-            metric_family.metrics,
-            labels,
-            %Metric{value: value, timestamp: timestamp},
-            fn metric -> %{metric | value: value, timestamp: timestamp} end
-          )
-
-        %{metric_family | metrics: metrics}
-      end
-    )
-    |> IO.inspect(label: "post_update")
-  end
-
-  # whitespace/empty line
-  defp do_reduce([], exposition), do: exposition
+  defp do_reduce(nil, exposition), do: exposition
 
   defp not_quote(<<?", _::binary>>, context, _, _), do: {:halt, context}
   defp not_quote(_, context, _, _), do: {:cont, context}

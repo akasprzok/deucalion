@@ -1,8 +1,8 @@
 defmodule DeucalionTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
   doctest Deucalion
 
-  alias Deucalion.{Exposition, MetricFamily, Metric}
+  alias Deucalion.{Metric, MetricFamily}
 
   test "parses a help line" do
     text = ~S(# HELP http_requests_total The total number of HTTP requests.
@@ -25,6 +25,25 @@ defmodule DeucalionTest do
                    value: 3.0,
                    timestamp: 1_395_066_363_000
                  }
+               }
+             }
+  end
+
+  test "wat" do
+    text = ~S(# Escaping in label values
+    msdos_file_access_time_seconds{path="C:\\DIR\\FILE.TXT",error="Cannot find file:\n\"FILE.TXT\""} 1.458255915e9
+    )
+
+    assert Deucalion.parse_text(text) ==
+             %MetricFamily{
+               name: "msdos_file_access_time_seconds",
+               type: :untyped,
+               help: nil,
+               metrics: %{
+                 %{
+                   "path" => "C:\\\\DIR\\\\FILE.TXT",
+                   "error" => "Cannot find file:\\n\"FILE.TXT\""
+                 } => %Metric{value: 1_458_255_915.0, timestamp: nil}
                }
              }
   end
