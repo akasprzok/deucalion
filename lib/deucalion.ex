@@ -9,18 +9,19 @@ defmodule Deucalion do
 
   import NimbleParsec
 
-  alias Deucalion.{CommentLine, HelpLine, Sample, TypeLine}
+  alias Deucalion.{MetricFamily, MetricType}
 
   leading_whitespace = optional(ignore(ascii_string([32, ?\t], min: 1)))
 
-  docstring =
+  help =
     utf8_string([], min: 1)
-    |> unwrap_and_tag(:docstring)
+    |> unwrap_and_tag(:help)
 
   metric_name =
     ascii_string([?a..?z, ?A..?Z, ?_, ?:], max: 1)
     |> ascii_string([?a..?z, ?A..?Z, ?_, ?:], min: 0)
-    |> tag(:metric_name)
+    |> reduce({List, :to_string, []})
+    |> unwrap_and_tag(:metric_name)
 
   help_body =
     string("HELP")
@@ -28,7 +29,7 @@ defmodule Deucalion do
     |> ignore(string(" "))
     |> concat(metric_name)
     |> ignore(string(" "))
-    |> concat(docstring)
+    |> concat(help)
 
   type_body =
     string("TYPE")
@@ -65,14 +66,17 @@ defmodule Deucalion do
     |> tag(:name)
 
   label_value =
-    optional(
-      ignore(string("\""))
-      |> ascii_string([32, ?a..?z, ?A..?Z, ?0..?9, ?-, ?_, ?...?:, ?\\, ?\n],
-        min: 1
-      )
-      |> ignore(string("\""))
-      |> unwrap_and_tag(:value)
+    ignore(string("\""))
+    |> repeat_while(
+      choice([
+        ~S(\") |> string() |> replace(?"),
+        utf8_char([])
+      ]),
+      {:not_quote, []}
     )
+    |> ignore(string("\""))
+    |> reduce({List, :to_string, []})
+    |> unwrap_and_tag(:value)
 
   label =
     label_name
@@ -120,70 +124,60 @@ defmodule Deucalion do
   def parse_file(path) do
     path
     |> File.read!()
-    |> parse_body()
+    |> parse_text()
   end
 
-  def parse_body(body) do
+  def parse_text(body) do
     body
     |> String.split("\n")
-    |> Enum.map(&parse_line/1)
+    |> IO.inspect(label: "split")
+    |> Enum.reduce(%{}, &parse_line/2)
   end
 
-  def parse_line(line) do
+  defp parse_line(line, exposition) do
     line
     |> parse()
-    |> to_line()
-  end
-
-  defp to_line(line) do
-    line
     |> case do
-      {:ok, value, _, _, _, _} ->
-        cast(value)
+      {:ok, tokens, "", _context, _position, _byte_offset} ->
+        do_reduce(tokens, exposition)
+        # {:ok, tokens, remainder, _context, _position, _byte_offset} ->
+        # {:error, reason, remainder, context, position, byte_offset}
     end
   end
 
-  defp cast([{:comment_type, "TYPE"} | opts]) do
-    opts =
-      opts
-      |> Keyword.update(:metric_name, nil, &format_metric_name/1)
-
-    struct!(TypeLine, opts)
+  defp do_reduce([comment_type: "HELP", metric_name: metric_name, help: help], exposition) do
+    Map.update(
+      exposition,
+      metric_name,
+      %MetricFamily{
+        name: metric_name,
+        help: help
+      },
+      fn metric_family ->
+        %{metric_family | help: help}
+      end
+    )
   end
 
-  defp cast([{:comment_type, "HELP"} | opts]) do
-    opts =
-      opts
-      |> Keyword.update(:metric_name, nil, &format_metric_name/1)
+  defp do_reduce(
+         [comment_type: "TYPE", metric_name: metric_name, metric_type: metric_type],
+         exposition
+       ) do
+    type = MetricType.parse(metric_type)
 
-    struct!(HelpLine, opts)
+    Map.update(
+      exposition,
+      metric_name,
+      %MetricFamily{
+        name: metric_name,
+        type: type
+      },
+      fn metric_family ->
+        %{metric_family | type: type}
+      end
+    )
   end
 
-  defp cast(comment: comment) do
-    %CommentLine{comment: comment}
-  end
-
-  defp cast([{:metric_name, _} | _] = opts) do
-    opts =
-      opts
-      |> Keyword.update(:timestamp, nil, &format_timestamp/1)
-      |> Keyword.update(:metric_name, nil, &format_metric_name/1)
-      |> Keyword.update(:labels, [], &format_labels/1)
-
-    struct!(Sample, opts)
-  end
-
-  defp format_timestamp(timestamp) do
-    timestamp |> String.to_integer()
-  end
-
-  defp format_metric_name(metric_name) do
-    metric_name |> IO.iodata_to_binary()
-  end
-
-  defp format_labels(labels) do
-    Enum.map(labels, fn {:label, [name: name, value: value]} ->
-      {name |> IO.iodata_to_binary(), value}
-    end)
-  end
+  defp not_quote(<<?", _::binary>>, context, _, _), do: {:halt, context}
+  defp not_quote(_, context, _, _), do: {:cont, context}
 end
